@@ -2909,6 +2909,14 @@ createrunners($numrunners);
 print "Runners: start run loop\n";
 my $runner_wait_cnt = 0;
 while () {
+    my $msg = "waiting for " . scalar(%runnersrunning) . " results:";
+    my $sep = " ";
+    foreach my $rid (keys %runnersrunning) {
+        $msg .= $sep . $runnersrunning{$rid} . "[$rid]";
+        $sep = ", "
+    }
+    printf "$msg\n";
+
     # check the abort flag
     if($globalabort) {
         logmsg singletest_dumplogs();
@@ -2927,13 +2935,14 @@ while () {
         last;
     }
 
+
     # Start a new test if possible
     if(scalar(@runnersidle) && scalar(@runtests)) {
         # A runner is ready to run a test, and tests are still available to run
         # so start a new test.
         $count++;
         my $testnum = shift(@runtests);
-
+        print "Runners: starting test $testnum\n";
         # pick a runner for this new test
         my $runnerid = pickrunner($testnum);
         $countforrunner{$runnerid} = $count;
@@ -2952,7 +2961,10 @@ while () {
                 die "Internal error: test must not complete on first call";
             }
         }
+
     }
+    print "Runners: check has runners\n";
+
 
     # See if we've completed all the tests
     if(!scalar(%runnersrunning)) {
@@ -2966,30 +2978,32 @@ while () {
     # one immediately. If all runners are busy, wait a fraction of a second
     # for one to finish so we can still loop around to check the abort flag.
     my $runnerwait = scalar(@runnersidle) && scalar(@runtests) ? 0 : 1.0;
-    my (@ridsready, $riderror) = runnerar_ready($runnerwait);
-    if(@ridsready) {
-        for my $ridready (@ridsready) {
-            if($ridready && ! defined $runnersrunning{$ridready}) {
-                # On Linux, a closed pipe still shows up as ready instead of error.
-                # Detect this here by seeing if we are expecting it to be ready and
-                # treat it as an error if not.
-                logmsg "ERROR: Runner $ridready is unexpectedly ready; is probably actually dead\n";
-                $riderror = $ridready;
-                undef $ridready;
-            }
-            if($ridready) {
-                # This runner is ready to be serviced
-                my $testnum = $runnersrunning{$ridready};
-                defined $testnum ||  die "Internal error: test for runner $ridready unknown";
-                delete $runnersrunning{$ridready};
-                my ($error, $again) = singletest($ridready, $testnum, $countforrunner{$ridready}, $totaltests);
-                if($again) {
-                    # this runner is busy running a test
-                    $runnersrunning{$ridready} = $testnum;
-                } else {
-                    # Test is complete
-                    $runner_wait_cnt = 0;
-                    runnerready($ridready);
+    my ($ridready, $riderror) = runnerar_ready($runnerwait);
+    if($ridready && ! defined $runnersrunning{$ridready}) {
+        # On Linux, a closed pipe still shows up as ready instead of error.
+        # Detect this here by seeing if we are expecting it to be ready and
+        # treat it as an error if not.
+        logmsg "ERROR: Runner $ridready is unexpectedly ready; is probably actually dead\n";
+        $riderror = $ridready;
+        undef $ridready;
+    }
+    
+    print "Runners: service runners $ridready\n" if $ridready;
+    print "Runners: service runners\n" if !$ridready;
+
+    if($ridready) {
+        # This runner is ready to be serviced
+        my $testnum = $runnersrunning{$ridready};
+        defined $testnum ||  die "Internal error: test for runner $ridready unknown";
+        delete $runnersrunning{$ridready};
+        my ($error, $again) = singletest($ridready, $testnum, $countforrunner{$ridready}, $totaltests);
+        if($again) {
+            # this runner is busy running a test
+            $runnersrunning{$ridready} = $testnum;
+        } else {
+            # Test is complete
+            $runner_wait_cnt = 0;
+            runnerready($ridready);
 
                     if($error < 0) {
                         # not a test we can run
@@ -3028,15 +3042,6 @@ while () {
     }
     if(!@ridsready && $runnerwait && !$torture && scalar(%runnersrunning)) {
         $runner_wait_cnt++;
-        if($runner_wait_cnt >= 5) {
-            my $msg = "waiting for " . scalar(%runnersrunning) . " results:";
-            my $sep = " ";
-            foreach my $rid (keys %runnersrunning) {
-                $msg .= $sep . $runnersrunning{$rid} . "[$rid]";
-                $sep = ", "
-            }
-            logmsg "$msg\n";
-        }
         if($runner_wait_cnt >= 10) {
             $runner_wait_cnt = 0;
             foreach my $rid (keys %runnersrunning) {
@@ -3046,6 +3051,8 @@ while () {
             }
         }
     }
+
+
     if($riderror) {
         logmsg "ERROR: runner $riderror is dead! aborting test run\n";
         delete $runnersrunning{$riderror} if(defined $runnersrunning{$riderror});
