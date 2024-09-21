@@ -1317,6 +1317,34 @@ sub controlleripccall {
 }
 
 ###################################################################
+# Read a number of bytes from a handle
+# Dies on error
+# Called by controller
+sub readall_or_die {
+    my ($handle, $length) = @_;
+    my $buffer = '';
+    my $bytes_read;
+
+    while ($length > 0) {
+        $bytes_read = sysread($handle, my $temp_buf, $length);
+
+        if (!defined $bytes_read) {
+            next if $!{EINTR};
+            die "Failed to read from handle: $!";
+        }
+
+        if ($bytes_read == 0) {
+            die "Unexpected end of file";
+        }
+
+        $buffer .= $temp_buf;
+        $length -= $bytes_read;
+    }
+
+    return $buffer;
+}
+
+###################################################################
 # Receive async response of a previous call via IPC
 # The first return value is the runner ID or undef on error
 # Called by controller
@@ -1324,22 +1352,13 @@ sub runnerar {
     my ($runnerid) = @_;
     my $err;
     my $datalen;
-    while(! defined ($err = sysread($controllerr{$runnerid}, $datalen, 4)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # Runner is likely dead and closed the pipe
-            return undef;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+
+    $datalen = readall_or_die($controllerr{$runnerid}, 4);
+
     my $len=unpack("L", $datalen);
     my $buf;
-    while(! defined ($err = sysread($controllerr{$runnerid}, $buf, $len)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # Runner is likely dead and closed the pipe
-            return undef;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+
+    $buf = readall_or_die($controllerr{$runnerid}, $len);
 
     # Decode response values
     my $resarrayref = thaw $buf;
@@ -1412,26 +1431,13 @@ sub runnerabort{
 sub ipcrecv {
     my $err;
     my $datalen;
-    while(! defined ($err = sysread($runnerr, $datalen, 4)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # pipe has closed; controller is gone and we must exit
-            runnerabort();
-            # Special case: no response will be forthcoming
-            return 1;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+
+    $datalen = readall_or_die($runnerr, 4);
+
     my $len=unpack("L", $datalen);
     my $buf;
-    while(! defined ($err = sysread($runnerr, $buf, $len)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # pipe has closed; controller is gone and we must exit
-            runnerabort();
-            # Special case: no response will be forthcoming
-            return 1;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+
+    $buf = readall_or_die($runnerr, $len);
 
     # Decode the function name and arguments
     my $argsarrayref = thaw $buf;

@@ -258,6 +258,7 @@ sub catch_zap {
 }
 $SIG{INT} = \&catch_zap;
 $SIG{TERM} = \&catch_zap;
+$SIG{__DIE__} = \&catch_zap;
 
 sub catch_usr1 {
     print "runtests.pl internal state:\r\n";
