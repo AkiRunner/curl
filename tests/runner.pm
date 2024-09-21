@@ -1458,12 +1458,21 @@ sub runnerabort{
 # Returns 0 if more IPC calls are expected or 1 if the runner should exit
 sub ipcrecv {
     my $datalen_buf = read_all($runnerr, 4);
-    return 1 unless defined $datalen_buf;
+    if(! defined($datalen_buf)) {
+            # pipe has closed; controller is gone and we must exit
+            runnerabort();
+            # Special case: no response will be forthcoming
+            return 1;
+    }
     my $len = unpack("L", $datalen_buf);
 
     my $buf = read_all($runnerr, $len);
-    return 1 unless defined $buf;
-
+    if(! defined($buf)) {
+            # pipe has closed; controller is gone and we must exit
+            runnerabort();
+            # Special case: no response will be forthcoming
+            return 1;
+    }
 
     # Decode the function name and arguments
     my $argsarrayref = thaw $buf;
