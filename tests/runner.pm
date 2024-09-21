@@ -140,6 +140,50 @@ my $runnerw;        # pipe that runner writes to
 my %controllerr;    # pipe that controller reads from
 my %controllerw;    # pipe that controller writes to
 
+sub write_all {
+    my ($fh, $buf) = @_;
+    my $total_length = length($buf);
+    my $offset = 0;
+
+    while ($offset < $total_length) {
+        my $written = syswrite($fh, substr($buf, $offset));
+
+        if (!defined $written) {
+            return 0 if !$!{EINTR}; # Fail on error other than EINTR
+            next; # Retry on EINTR
+        }
+        elsif ($written == 0) {
+            return 0; # Pipe closed
+        }
+
+        $offset += $written;
+    }
+
+    return 1; # Success
+}
+
+sub read_all {
+    my ($fh, $len) = @_;
+    my $buf = '';
+    my $offset = 0;
+
+    while ($offset < $len) {
+        my $read = sysread($fh, $buf, $len - $offset, $offset);
+
+        if (!defined $read) {
+            return undef if !$!{EINTR}; # Fail on error other than EINTR
+            next; # Retry on EINTR
+        }
+        elsif ($read == 0) {
+            return undef; # Pipe closed
+        }
+
+        $offset += $read;
+    }
+
+    return $buf; # Success
+}
+
 # redirected stdout/stderr to these files
 sub stdoutfilename {
     my ($logdir, $testnum)=@_;
@@ -1301,13 +1345,10 @@ sub controlleripccall {
 
     # Send IPC call via pipe
     my $err;
-    while(! defined ($err = syswrite($controllerw{$runnerid}, (pack "L", length($margs)) . $margs)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # Runner has likely died
-            return -1;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+
+    my $data_to_send = (pack "L", length($margs)) . $margs;
+    my $success = write_all($controllerw{$runnerid}, $data_to_send);
+    return -1 unless $success;
 
     if(!$multiprocess) {
         # Call the remote function here in single process mode
@@ -1322,27 +1363,16 @@ sub controlleripccall {
 # Called by controller
 sub runnerar {
     my ($runnerid) = @_;
-    my $err;
-    my $datalen;
-    while(! defined ($err = sysread($controllerr{$runnerid}, $datalen, 4)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # Runner is likely dead and closed the pipe
-            return undef;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
-    my $len=unpack("L", $datalen);
-    my $buf;
-    while(! defined ($err = sysread($controllerr{$runnerid}, $buf, $len)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # Runner is likely dead and closed the pipe
-            return undef;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+
+    my $datalen_buf = read_all($controllerr{$runnerid}, 4);
+    return undef unless defined $datalen_buf;
+    my $len = unpack("L", $datalen_buf);
+
+    my $data_buf = read_all($controllerr{$runnerid}, $len);
+    return undef unless defined $data_buf;
 
     # Decode response values
-    my $resarrayref = thaw $buf;
+    my $resarrayref = thaw $data_buf;
 
     # First argument is runner ID
     # TODO: remove this; it's unneeded since it's passed in
@@ -1410,28 +1440,13 @@ sub runnerabort{
 # written to the $runnerw pipe
 # Returns 0 if more IPC calls are expected or 1 if the runner should exit
 sub ipcrecv {
-    my $err;
-    my $datalen;
-    while(! defined ($err = sysread($runnerr, $datalen, 4)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # pipe has closed; controller is gone and we must exit
-            runnerabort();
-            # Special case: no response will be forthcoming
-            return 1;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
-    my $len=unpack("L", $datalen);
-    my $buf;
-    while(! defined ($err = sysread($runnerr, $buf, $len)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # pipe has closed; controller is gone and we must exit
-            runnerabort();
-            # Special case: no response will be forthcoming
-            return 1;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
-    }
+    my $datalen_buf = read_all($runnerr, 4);
+    return 1 unless defined $datalen_buf;
+    my $len = unpack("L", $datalen_buf);
+
+    my $buf = read_all($runnerr, $len);
+    return 1 unless defined $buf;
+
 
     # Decode the function name and arguments
     my $argsarrayref = thaw $buf;
@@ -1466,14 +1481,13 @@ sub ipcrecv {
     # Marshall the results to return
     $buf = freeze \@res;
 
-    while(! defined ($err = syswrite($runnerw, (pack "L", length($buf)) . $buf)) || $err <= 0) {
-        if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
-            # pipe has closed; controller is gone and we must exit
-            runnerabort();
-            # Special case: no response will be forthcoming
-            return 1;
-        }
-        # system call was interrupted, probably by ^C; restart it so we stay in sync
+    my $data_to_send = (pack "L", length($buf)) . $buf;
+
+    if(!write_all($runnerw, $data_to_send)) {
+        # pipe has closed; controller is gone and we must exit
+        runnerabort();
+        # Special case: no response will be forthcoming
+        return 1;
     }
 
     return 0;
