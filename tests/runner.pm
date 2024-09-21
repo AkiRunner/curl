@@ -1350,6 +1350,7 @@ sub runnerar {
     }
     my $len=unpack("L", $datalen);
     my $buf;
+    my @bufs = ();
     my $nread = 0;
     while(! defined ($err = sysread($controllerr{$runnerid}, $buf, $len)) || $err <= 0 || $nread < $len) {
         if((!defined $err && ! $!{EINTR}) || (defined $err && $err == 0)) {
@@ -1359,6 +1360,7 @@ sub runnerar {
 
 
         if(defined($err) && $err > 0) {
+            @bufs = (@bufs, $buf);
             $nread += $err;
             if($nread >= $len) {
                 last;
@@ -1373,7 +1375,7 @@ sub runnerar {
     my $resarrayref;
 
     eval {
-        $resarrayref = thaw $buf;
+        $resarrayref = thaw join("", @bufs);
     } or do {
         my $e = $@;
         print("runneerar went wrong: $e buf $err $len\n");
