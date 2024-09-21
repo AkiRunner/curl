@@ -3008,37 +3008,39 @@ while () {
     # one immediately. If all runners are busy, wait a fraction of a second
     # for one to finish so we can still loop around to check the abort flag.
     my $runnerwait = scalar(@runnersidle) && scalar(@runtests) ? 0 : 1.0;
-    my ($ridready, $riderror) = runnerar_ready($runnerwait);
-    if($ridready && ! defined $runnersrunning{$ridready}) {
-        # On Linux, a closed pipe still shows up as ready instead of error.
-        # Detect this here by seeing if we are expecting it to be ready and
-        # treat it as an error if not.
-        logmsg "ERROR: Runner $ridready is unexpectedly ready; is probably actually dead\n";
-        $riderror = $ridready;
-        undef $ridready;
-    }
+    my (@ridsready, $riderror) = runnerar_ready($runnerwait);
+    if(@ridsready) {
+        for my $ridready (@ridsready) {
+            if($ridready && ! defined $runnersrunning{$ridready}) {
+                # On Linux, a closed pipe still shows up as ready instead of error.
+                # Detect this here by seeing if we are expecting it to be ready and
+                # treat it as an error if not.
+                logmsg "ERROR: Runner $ridready is unexpectedly ready; is probably actually dead\n";
+                $riderror = $ridready;
+                undef $ridready;
+            }
     
     print "Runners: service runners $ridready\n" if $ridready;
     print "Runners: service runners\n" if !$ridready;
 
-    if($ridready) {
-        # This runner is ready to be serviced
-        my $testnum = $runnersrunning{$ridready};
-        my $testnum_if_defined = defined $testnum ? $testnum : "undef";
-        print "Runners: service runners test $testnum_if_defined\n";
-        print "Runners: service runners state: $singletest_state{$ridready}\n" if defined $ridready;
-        defined $testnum ||  die "Internal error: test for runner $ridready unknown";
-        delete $runnersrunning{$ridready};
-        my ($error, $again) = singletest($ridready, $testnum, $countforrunner{$ridready}, $totaltests);
-        print "Runners: service runners after state: $singletest_state{$ridready}\n" if defined $ridready;
+            if($ridready) {
+                # This runner is ready to be serviced
+                my $testnum = $runnersrunning{$ridready};
+                my $testnum_if_defined = defined $testnum ? $testnum : "undef";
+                print "Runners: service runners test $testnum_if_defined\n";
+                print "Runners: service runners state: $singletest_state{$ridready}\n" if defined $ridready;
+                defined $testnum ||  die "Internal error: test for runner $ridready unknown";
+                delete $runnersrunning{$ridready};
+                my ($error, $again) = singletest($ridready, $testnum, $countforrunner{$ridready}, $totaltests);
+                print "Runners: service runners after state: $singletest_state{$ridready}\n" if defined $ridready;
 
-        if($again) {
-            # this runner is busy running a test
-            $runnersrunning{$ridready} = $testnum;
-        } else {
-            # Test is complete
-            $runner_wait_cnt = 0;
-            runnerready($ridready);
+                if($again) {
+                    # this runner is busy running a test
+                    $runnersrunning{$ridready} = $testnum;
+                } else {
+                    # Test is complete
+                    $runner_wait_cnt = 0;
+                    runnerready($ridready);
 
                     if($error < 0) {
                         # not a test we can run
