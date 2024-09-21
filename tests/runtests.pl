@@ -1224,6 +1224,7 @@ sub normalize_text {
 sub singletest_check {
     my ($runnerid, $testnum, $cmdres, $CURLOUT, $tool, $usedvalgrind)=@_;
 
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid\n";
     # Skip all the verification on torture tests
     if ($torture) {
         # timestamp test result verification end
@@ -1255,6 +1256,7 @@ sub singletest_check {
         # Enforce LF newlines on load
         s/\r\n/\n/g for @validstdout;
     }
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify stdout\n";
 
     if (@validstdout) {
         # verify redirected stdout
@@ -1302,6 +1304,8 @@ sub singletest_check {
     else {
         $ok .= "-"; # stdout not checked
     }
+
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify stderr\n";
 
     my @validstderr = getpart("verify", "stderr");
     if (@validstderr) {
@@ -1364,6 +1368,8 @@ sub singletest_check {
     # what parts to cut off from the protocol & upload
     my @strippart = getpart("verify", "strippart");
 
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify protocol\n";
+
     # this is the valid protocol blurb curl should generate
     my @protocol= getpart("verify", "protocol");
     if(@protocol) {
@@ -1417,6 +1423,8 @@ sub singletest_check {
     else {
         $ok .= "-"; # protocol not checked
     }
+
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify reply\n";
 
     my %replyattr = getpartattr("reply", "data");
     my @reply;
@@ -1484,6 +1492,8 @@ sub singletest_check {
         $ok .= "-"; # data not checked
     }
 
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify upload\n";
+
     # if this section exists, we verify upload
     my @upload = getpart("verify", "upload");
     if(@upload) {
@@ -1524,6 +1534,8 @@ sub singletest_check {
     else {
         $ok .= "-"; # upload not checked
     }
+
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify proxy\n";
 
     # this is the valid protocol blurb curl should generate to a proxy
     my @proxyprot = getpart("verify", "proxy");
@@ -1569,6 +1581,7 @@ sub singletest_check {
     else {
         $ok .= "-"; # proxy not checked
     }
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify verify\n";
 
     my $outputok;
     for my $partsuffix (('', '1', '2', '3', '4')) {
@@ -1648,6 +1661,8 @@ sub singletest_check {
         }
     }
     $ok .= ($outputok) ? "o" : "-"; # output checked or not
+
+    printf "singletest_check: testnum=$testnum, runnerid=$runnerid, verify sock\n";
 
     # verify SOCKS proxy details
     my @socksprot = getpart("verify", "socks");
@@ -1979,7 +1994,7 @@ sub singletest {
         my $logdir = getrunnerlogdir($runnerid);
         loadtest("${logdir}/test${testnum}");
         readtestkeywords();
-
+        printf "singletest_check $runnerid $testnum\n";
         $error = singletest_check($runnerid, $testnum, $cmdres, $CURLOUT, $tool, $usedvalgrind);
         if($error == -1) {
             my $err = ignoreresultcode($testnum);
@@ -1987,6 +2002,8 @@ sub singletest {
             citest_finishtest($testnum, $err);
             $singletest_state{$runnerid} = ST_INIT;
             logmsg singletest_dumplogs();
+            printf "singletest_check $error $runnerid $testnum\n";
+
             # return a test failure, either to be reported or to be ignored
             return ($err, 0);
         }
@@ -1999,6 +2016,7 @@ sub singletest {
             logmsg singletest_dumplogs();
             return ($cmdres, 0);
         }
+        printf "singletest_check done $runnerid $testnum\n";
 
 
         #######################################################################
@@ -3000,6 +3018,8 @@ while () {
         defined $testnum ||  die "Internal error: test for runner $ridready unknown";
         delete $runnersrunning{$ridready};
         my ($error, $again) = singletest($ridready, $testnum, $countforrunner{$ridready}, $totaltests);
+        print "Runners: service runners after state: $singletest_state{$ridready}\n" if defined $ridready;
+
         if($again) {
             # this runner is busy running a test
             $runnersrunning{$ridready} = $testnum;
