@@ -223,10 +223,10 @@ sub pidwait {
             portable_sleep(0.01);
             $total += 0.01;
             if($total > 1) {
-                logmsg "pidwait: $pid timed out\n";
+                logmsg "pidwait: native $pid timed out\n";
                 logmsg `ps -W`;
                 logmsg `netstat -a -o`;
-                print "pidwait: $pid timed out\n";
+                print "pidwait: native $pid timed out\n";
                 print(`ps -W`);
                 print(`netstat -a -o`);
 
@@ -322,6 +322,9 @@ sub killpid {
         if($tmp =~ /^(\d+)$/) {
             my $pid = $1;
             if($pid > 0) {
+                my $rpid = winpid_to_pid($pid);
+                print("RUN: Process with pid $pid -> $rpid\n")
+                    if($verbose);
                 if(pidexists($pid)) {
                     print("RUN: Process with pid $pid signalled to die\n")
                         if($verbose);
