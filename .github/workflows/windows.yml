@@ -62,7 +62,7 @@ jobs:
       fail-fast: false
     steps:
       - run: |
-          Add-MpPreference -ExclusionPath $(Get-Location).tostring(),$Env:TEMP,c:\
+          Set-MpPreference -DisableRealtimeMonitoring $true
           Set-MpPreference -EnableNetworkProtection Disabled
         shell: pwsh
       - run: git config --global core.autocrlf input
@@ -325,7 +325,7 @@ jobs:
       fail-fast: false
     steps:
       - run: |
-          Add-MpPreference -ExclusionPath $(Get-Location).tostring(),$Env:TEMP,c:\
+          Set-MpPreference -DisableRealtimeMonitoring $true
           Set-MpPreference -EnableNetworkProtection Disabled
         shell: pwsh
       - name: 'cache compiler (gcc ${{ matrix.env }})'
@@ -579,7 +579,7 @@ jobs:
       fail-fast: false
     steps:
       - run: |
-          Add-MpPreference -ExclusionPath $(Get-Location).tostring(),$Env:TEMP,c:\
+          Set-MpPreference -DisableRealtimeMonitoring $true
           Set-MpPreference -EnableNetworkProtection Disabled
         shell: pwsh
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4
