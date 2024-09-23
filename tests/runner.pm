@@ -157,6 +157,7 @@ sub write_all {
         }
 
         $offset += $written;
+        printf("write_all: wrote %d bytes, expected %d\n", $offset, $total_length);
     }
 
     return 1; # Success
@@ -179,6 +180,10 @@ sub read_all {
         }
 
         $offset += $read;
+
+        if($offset < $len) {
+            printf("read_all: read %d bytes, expected %d\n", $offset, $len);
+        }
     }
 
     return $buf; # Success
