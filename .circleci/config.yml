@@ -144,7 +144,7 @@ commands:
 
   test:
     steps:
-      - run: make -j3 V=1 test-ci TFLAGS='-j14'
+      - run: make -j3 V=1 test-ci TFLAGS='-j28'
 
 executors:
   ubuntu:

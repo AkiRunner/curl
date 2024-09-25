@@ -157,7 +157,9 @@ sub write_all {
         }
 
         $offset += $written;
-        printf("write_all: wrote %d bytes, expected %d\n", $offset, $total_length);
+        if($offset < $total_length) {
+            printf("write_all: wrote %d bytes, expected %d\n", $offset, $total_length);
+        }
     }
 
     return 1; # Success
